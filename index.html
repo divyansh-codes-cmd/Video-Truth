@@ -206,6 +206,21 @@
       padding: 5px 12px;
     }
 
+    .signup-header-btn {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 20px;
+      padding: 6px 16px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .signup-header-btn:hover { background: #6a5fdd; transform: scale(1.03); }
+
     .logout-btn {
       font-family: 'IBM Plex Mono', monospace;
       font-size: 11px;
@@ -463,6 +478,7 @@
 
     .error-card.visible { display: block; }
 
+    /* ===== STATS — now per-user, session only ===== */
     .stats-row { display: flex; gap: 12px; width: 100%; flex-wrap: wrap; }
 
     .stat-box {
@@ -472,10 +488,53 @@
       border-radius: 12px;
       padding: 1rem;
       text-align: center;
+      transition: border-color 0.3s;
     }
 
-    .stat-num { font-size: 1.6rem; font-weight: 700; color: var(--accent2); letter-spacing: -1px; }
+    .stat-box:hover { border-color: var(--border2); }
+
+    .stat-num {
+      font-size: 1.6rem; font-weight: 700;
+      color: var(--accent2);
+      letter-spacing: -1px;
+      transition: transform 0.2s;
+    }
+
+    .stat-num.bump {
+      animation: statBump 0.35s ease;
+    }
+
+    @keyframes statBump {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.25); }
+      100% { transform: scale(1); }
+    }
+
     .stat-lbl { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-top: 2px; }
+
+    /* small badge showing "your session" */
+    .stats-label {
+      width: 100%;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stats-label::before {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .stats-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
 
     footer {
       position: relative; z-index: 1;
@@ -498,7 +557,7 @@
 <div class="glow"></div>
 
 <!-- ========== AUTH PAGE ========== -->
-<div class="page active" id="authPage">
+<div class="page" id="authPage">
   <div class="auth-wrapper">
     <div class="auth-logo">
       <div class="auth-logo-icon">🔍</div>
@@ -548,14 +607,14 @@
 </div>
 
 <!-- ========== MAIN APP PAGE ========== -->
-<div class="page" id="appPage">
+<div class="page active" id="appPage">
   <header>
     <div class="logo">
       <div class="logo-icon">🔍</div>
       <div class="logo-text">Video<span>Truth</span></div>
     </div>
     <div class="header-right">
-      <div class="user-chip" id="userChip">👤 user</div>
+      <button class="signup-header-btn" onclick="goToSignUp()">Sign Up</button>
       <button class="logout-btn" onclick="doLogout()">Logout</button>
     </div>
   </header>
@@ -611,6 +670,8 @@
       </div>
     </div>
 
+    <!-- Per-user session stats only -->
+    <div class="stats-label" id="statsLabel">YOUR SESSION STATS</div>
     <div class="stats-row">
       <div class="stat-box">
         <div class="stat-num" id="totalCount">0</div>
@@ -627,13 +688,16 @@
     </div>
   </main>
 
-  <footer>VideoTruth — AI Video Detector &nbsp;|&nbsp; Backend: FastAPI + Python</footer>
+  <!-- <footer>VideoTruth — AI Video Detector &nbsp;|&nbsp; Backend: FastAPI + Python</footer> -->
+   <footer>VideoTruth — AI Video Detector &nbsp;|&nbsp; Backend: FastAPI + Python &nbsp;|&nbsp; Designed by <span>Divyansh</span></footer>
 </div>
 
 <script>
   const API = 'http://localhost:8000';
   let currentUser = null;
-  let stats = { total: 0, ai: 0, real: 0 };
+
+  // Per-user session stats — reset to 0 on every login
+  let userStats = { total: 0, ai: 0, real: 0 };
 
   // ===== AUTH =====
 
@@ -703,10 +767,18 @@
       if (!res.ok) { showMsg(data.detail || 'Login failed.', 'error'); return; }
 
       currentUser = data.username;
-      document.getElementById('userChip').textContent = '👤 ' + currentUser;
+
+      userStats = { total: 0, ai: 0, real: 0 };
+      renderStats();
+
+      document.getElementById('statsLabel').textContent = currentUser.toUpperCase() + "'S STATS";
+
       document.getElementById('authPage').classList.remove('active');
       document.getElementById('appPage').classList.add('active');
-      loadStats();
+
+      // Load this user's historical counts from the backend
+      loadUserStats(currentUser);
+
     } catch {
       showMsg('Unable to connect to server. Please start the backend!', 'error');
     } finally {
@@ -714,14 +786,23 @@
     }
   }
 
-  function doLogout() {
-    currentUser = null;
+  // Go to Sign Up tab on auth page (used from header button)
+  function goToSignUp() {
+    switchTab('register');
     document.getElementById('appPage').classList.remove('active');
     document.getElementById('authPage').classList.add('active');
-    document.getElementById('loginUsername').value = '';
-    document.getElementById('loginPassword').value = '';
+  }
+
+  function doLogout() {
+    currentUser = null;
+    userStats = { total: 0, ai: 0, real: 0 };
+    renderStats();
+
+    document.getElementById('statsLabel').textContent = "YOUR STATS";
+    document.getElementById('authPage').classList.remove('active');
+    document.getElementById('appPage').classList.add('active');
+    document.getElementById('videoUrl').value = '';
     hideEl('resultCard'); hideEl('errorCard'); hideEl('loadingCard');
-    hideMsg();
   }
 
   // ===== ANALYZE =====
@@ -739,6 +820,14 @@
   async function analyzeVideo() {
     const url = document.getElementById('videoUrl').value.trim();
     if (!url) { showError('Please enter a video URL first!'); return; }
+
+    // 🔒 Guard: if somehow not logged in, redirect to auth
+    if (!currentUser) {
+      switchTab('login');
+      document.getElementById('appPage').classList.remove('active');
+      document.getElementById('authPage').classList.add('active');
+      return;
+    }
 
     hideEl('resultCard'); hideEl('errorCard');
     showEl('loadingCard');
@@ -762,7 +851,10 @@
       const data = await res.json();
       hideEl('loadingCard');
       showResult(data);
-      updateStats(data.verdict);
+
+      // ✅ Update only THIS user's session stats
+      updateUserStats(data.verdict);
+
     } catch (e) {
       hideEl('loadingCard');
       showError(e.message || 'Something went wrong!');
@@ -807,24 +899,37 @@
     showEl('errorCard');
   }
 
-  function updateStats(verdict) {
-    stats.total++;
-    if (verdict === 'AI Generated') stats.ai++;
-    else if (verdict === 'Real') stats.real++;
-    document.getElementById('totalCount').textContent = stats.total;
-    document.getElementById('aiCount').textContent = stats.ai;
-    document.getElementById('realCount').textContent = stats.real;
+  // ✅ Update only the current user's session stats (not global DB stats)
+  function updateUserStats(verdict) {
+    userStats.total++;
+    if (verdict === 'AI Generated') userStats.ai++;
+    else if (verdict === 'Real') userStats.real++;
+    renderStats();
   }
 
-  async function loadStats() {
+  // Renders the current userStats to the DOM with a bump animation
+  function renderStats() {
+    ['totalCount', 'aiCount', 'realCount'].forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.remove('bump');
+      void el.offsetWidth; // reflow to restart animation
+      el.classList.add('bump');
+    });
+    document.getElementById('totalCount').textContent = userStats.total;
+    document.getElementById('aiCount').textContent    = userStats.ai;
+    document.getElementById('realCount').textContent  = userStats.real;
+  }
+
+  // Load this user's old status from the backend
+  async function loadUserStats(username) {
     try {
-      const res = await fetch(`${API}/stats`);
+      const res = await fetch(`${API}/stats?username=${encodeURIComponent(username)}`);
       const data = await res.json();
-      stats = { total: data.total, ai: data.ai, real: data.real };
-      document.getElementById('totalCount').textContent = stats.total;
-      document.getElementById('aiCount').textContent = stats.ai;
-      document.getElementById('realCount').textContent = stats.real;
-    } catch {}
+      userStats = { total: data.total || 0, ai: data.ai || 0, real: data.real || 0 };
+      renderStats();
+    } catch {
+      // If the backend is not found, it will remain 0.
+    }
   }
 
   function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
