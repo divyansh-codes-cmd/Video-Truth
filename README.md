@@ -12,6 +12,10 @@ A deepfake detection web app that analyzes any video URL to determine whether th
 - 👤 User registration & login system
 - 📁 Analysis history saved per user
 - 🌐 Clean web-based frontend (no installation needed for users)
+- 🔒 Analyze button only works after login
+- 📈 Each user has their own personal stats (previous counts reload on login)
+- 🔄 Stats reset to zero on logout
+- 🆕 **Sign Up** button in header for quick registration
 
 ---
 
@@ -30,19 +34,44 @@ A deepfake detection web app that analyzes any video URL to determine whether th
 
 ## 🔬 How It Works
 
-1. User pastes a video URL (YouTube, Instagram, etc.)
-2. Video is downloaded using **yt-dlp**
-3. **10 frames** are extracted from the video
-4. Each frame is analyzed using 5 signals:
+1. User signs up or logs in
+2. Pastes a video URL (YouTube, Instagram, TikTok, Twitter/X, Direct MP4)
+3. Video is downloaded using **yt-dlp**
+4. **10 frames** are extracted from the video
+5. Each frame is analyzed using 5 signals:
    - 🔊 **Noise Uniformity** — AI videos are too smooth
    - 📐 **Edge Consistency** — AI edges are too perfect
    - 🎨 **Color Distribution** — AI colors are too balanced
    - 👁️ **Face Artifacts** — frequency anomalies in facial regions
    - 🎞️ **Temporal Consistency** — unnatural frame transitions
-5. Scores are combined into a final verdict:
+6. Scores are combined into a final verdict:
    - ✅ **Real**
-   - ⚠️ **AI Generated**
-   - ❓ **Uncertain**
+   - 🤖 **AI Generated**
+   - ⚠️ **Uncertain**
+
+---
+
+## 🖥️ Frontend Flow
+
+```
+Open the app
+     ↓
+Main page loads (stats = 0/0/0)
+     ↓
+Click "Sign Up"  →  Register page
+Click "Analyze"  →  Redirected to Login (without login, analyze is blocked)
+     ↓
+Login / Register
+     ↓
+Previous stats load automatically from backend
+     ↓
+Paste a video URL → Click Analyze
+     ↓
+Result + Confidence Score + Detection Signals displayed
+Stats update (+1)
+     ↓
+Logout → Stats reset to 0/0/0
+```
 
 ---
 
@@ -72,7 +101,9 @@ Then open `index.html` in your browser.
 | POST | `/login` | Login to existing account |
 | POST | `/analyze` | Analyze a video URL |
 | GET | `/history` | Get analysis history |
-| GET | `/stats` | Get analysis statistics |
+| GET | `/stats?username=xyz` | Get stats for a specific user |
+
+> **Note:** Pass the `username` query parameter in `/stats` to fetch only that user's counts.
 
 ---
 
