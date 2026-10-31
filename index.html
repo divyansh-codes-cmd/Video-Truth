@@ -173,7 +173,7 @@
     .auth-msg.success { background: rgba(62,207,142,0.08); border: 1px solid rgba(62,207,142,0.25); color: var(--real); }
     .auth-msg.visible { display: block; }
 
-    /* ------ MAIN APP ------- */
+    /* ===== MAIN APP ===== */
     header {
       position: relative; z-index: 1;
       width: 100%; max-width: 860px;
@@ -286,6 +286,9 @@
     }
 
     .input-row { display: flex; gap: 10px; align-items: stretch; }
+    .or-divider { text-align: center; color: var(--muted); font-size: 12px; letter-spacing: 1px; margin: 18px 0 12px; }
+    .file-input { color: var(--muted); font-size: 13px; padding: 0.6rem 0.8rem; cursor: pointer; }
+    .file-hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
 
     .url-input {
       flex: 1;
@@ -478,7 +481,7 @@
 
     .error-card.visible { display: block; }
 
-    /* ------ STATS — now per-user, session only ------ */
+    /* ===== STATS — now per-user, session only ===== */
     .stats-row { display: flex; gap: 12px; width: 100%; flex-wrap: wrap; }
 
     .stat-box {
@@ -556,7 +559,7 @@
 <body>
 <div class="glow"></div>
 
-<!---------- AUTH PAGE ---------->
+<!-- ========== AUTH PAGE ========== -->
 <div class="page" id="authPage">
   <div class="auth-wrapper">
     <div class="auth-logo">
@@ -573,7 +576,7 @@
 
       <div id="authMsg" class="auth-msg error"></div>
 
-      <!-------- Login Form ---------->
+      <!-- Login Form -->
       <div id="loginForm">
         <div class="form-group">
           <label class="form-label">Username</label>
@@ -606,7 +609,7 @@
   </div>
 </div>
 
-<!------------ MAIN APP PAGE ---------->
+<!-- ========== MAIN APP PAGE ========== -->
 <div class="page active" id="appPage">
   <header>
     <div class="logo">
@@ -629,6 +632,12 @@
         <input class="url-input" id="videoUrl" type="url" placeholder="https://youtube.com/watch?v=..."/>
         <button class="analyze-btn" id="analyzeBtn" onclick="analyzeVideo()">Analyze →</button>
       </div>
+      <div class="or-divider">OR UPLOAD A VIDEO FILE</div>
+      <div class="input-row">
+        <input class="url-input file-input" id="videoFile" type="file" accept="video/*,.mp4,.mov,.webm,.mkv,.avi"/>
+        <button class="analyze-btn" id="uploadBtn" onclick="analyzeUpload()">Upload &amp; Analyze &rarr;</button>
+      </div>
+      <div class="file-hint">MP4, MOV, WEBM, MKV or AVI &middot; max 50 MB &middot; most reliable option</div>
       <div class="platform-chips">
         <span class="chip">YouTube</span>
         <span class="chip">Instagram</span>
@@ -670,7 +679,7 @@
       </div>
     </div>
 
-    <!------ Per-user session stats only -------->
+    <!-- Per-user session stats only -->
     <div class="stats-label" id="statsLabel">YOUR SESSION STATS</div>
     <div class="stats-row">
       <div class="stat-box">
@@ -701,7 +710,7 @@
   // Per-user session stats — reset to 0 on every login
   let userStats = { total: 0, ai: 0, real: 0 };
 
-  // ------ AUTH --------
+  // ===== AUTH =====
 
   function switchTab(tab) {
     hideMsg();
@@ -869,6 +878,54 @@
     document.getElementById('analyzeBtn').disabled = false;
   }
 
+  async function analyzeUpload() {
+    const input = document.getElementById('videoFile');
+    const file = input.files[0];
+    if (!file) { showError('Please choose a video file first!'); return; }
+    if (file.size > 50 * 1024 * 1024) { showError('File is too large. Maximum size is 50 MB.'); return; }
+
+    if (!currentUser) {
+      document.getElementById('appPage').classList.remove('active');
+      document.getElementById('authPage').classList.add('active');
+      switchTab('login');
+      showMsg('Please log in first to analyze videos.', 'error');
+      return;
+    }
+
+    hideEl('resultCard'); hideEl('errorCard');
+    showEl('loadingCard');
+    document.getElementById('analyzeBtn').disabled = true;
+    document.getElementById('uploadBtn').disabled = true;
+    setStep(1);
+
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('username', currentUser);
+
+      setStep(2);
+      const res = await fetch(`${API}/analyze-upload`, { method: 'POST', body: form });
+      setStep(4); await delay(400);
+
+      if (!res.ok) {
+        let msg = 'Server error';
+        try { const err = await res.json(); msg = err.detail || msg; } catch (e) {}
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      hideEl('loadingCard');
+      showResult(data);
+      updateUserStats(data.verdict);
+    } catch (e) {
+      hideEl('loadingCard');
+      showError(e.message || 'Something went wrong!');
+    }
+
+    document.getElementById('analyzeBtn').disabled = false;
+    document.getElementById('uploadBtn').disabled = false;
+  }
+
   function showResult(data) {
     const { verdict, confidence, signals } = data;
     const isAI = verdict === 'AI Generated', isReal = verdict === 'Real';
@@ -940,7 +997,7 @@
 
   function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  // -------- STARTUP ---------
+  // ===== STARTUP =====
   (function init() {
     if (currentUser) {
       document.getElementById('statsLabel').textContent = currentUser.toUpperCase() + "'S STATS";
