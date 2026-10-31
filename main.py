@@ -20,7 +20,7 @@ app.add_middleware(
 
 init_db()
 
-# ===== MODELS =====
+# --------- MODELS --------
 
 class RegisterRequest(BaseModel):
     username: str
@@ -35,12 +35,12 @@ class VideoRequest(BaseModel):
     url: str
     username: str = None
 
-# ===== HELPER =====
+# -------- HELPER -------
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-# ===== AUTH ROUTES =====
+# ------ AUTH ROUTES -------
 
 @app.post("/register")
 def register(req: RegisterRequest):
@@ -74,7 +74,7 @@ def login(req: LoginRequest):
 
     return {"message": "Login successful!", "username": user[1]}
 
-# ===== VIDEO ANALYSIS =====
+# ------ VIDEO ANALYSIS -------
 
 def download_video(url: str) -> str:
     tmp_dir = tempfile.mkdtemp()
@@ -113,7 +113,7 @@ def extract_frames(video_path: str, num_frames: int = 10) -> list:
     return frames
 
 
-# ===== REAL DETECTION FUNCTIONS =====
+# ------ REAL DETECTION FUNCTIONS --------
 
 def check_noise_uniformity(frame) -> float:
     """
