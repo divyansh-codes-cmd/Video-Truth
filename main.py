@@ -437,6 +437,8 @@ def analyze_video(req: VideoRequest):
             raise HTTPException(status_code=400, detail="Server could not connect to the internet. DNS error — please try again later.")
         elif "timed out" in err.lower():
             raise HTTPException(status_code=400, detail="Video download timed out. Instagram may be slow, please try again.")
+        elif "confirm you" in err and "bot" in err:
+            raise HTTPException(status_code=400, detail="YouTube blocked this request from our server. Please use the 'Upload a video file' option below instead.")
         elif "Private" in err or "login" in err.lower():
             raise HTTPException(status_code=400, detail="This video is private. Please provide a public video URL.")
         else:
