@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import hashlib
@@ -20,7 +20,7 @@ app.add_middleware(
 
 init_db()
 
-# --------- MODELS --------
+# ===== MODELS =====
 
 class RegisterRequest(BaseModel):
     username: str
@@ -35,12 +35,12 @@ class VideoRequest(BaseModel):
     url: str
     username: str = None
 
-# -------- HELPER -------
+# ===== HELPER =====
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-# ------ AUTH ROUTES -------
+# ===== AUTH ROUTES =====
 
 @app.post("/register")
 def register(req: RegisterRequest):
@@ -74,21 +74,20 @@ def login(req: LoginRequest):
 
     return {"message": "Login successful!", "username": user[1]}
 
-# ------ VIDEO ANALYSIS -------
+# ===== VIDEO ANALYSIS =====
 
 def download_video(url: str) -> str:
     tmp_dir = tempfile.mkdtemp()
     output_path = os.path.join(tmp_dir, "video.mp4")
     ydl_opts = {
         'outtmpl': output_path,
-        'format': 'mp4/best[height<=480]',
+        'format': 'best[ext=mp4][height<=480]/best[height<=480]/best',
         'quiet': True,
         'no_warnings': True,
+        'noprogress': True,
         'socket_timeout': 30,
         'retries': 3,
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-        },
+        'max_filesize': 100 * 1024 * 1024,  # skip files bigger than 100 MB
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -113,7 +112,7 @@ def extract_frames(video_path: str, num_frames: int = 10) -> list:
     return frames
 
 
-# ------ REAL DETECTION FUNCTIONS --------
+# ===== REAL DETECTION FUNCTIONS =====
 
 def check_noise_uniformity(frame) -> float:
     """
@@ -406,7 +405,7 @@ def root():
     return {"message": "VideoTruth API is running!"}
 
 @app.post("/analyze")
-async def analyze_video(req: VideoRequest):
+def analyze_video(req: VideoRequest):
     url = req.url.strip()
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Please enter a valid URL.")
@@ -448,6 +447,55 @@ async def analyze_video(req: VideoRequest):
     finally:
         if video_path:
             cleanup(video_path)
+
+MAX_UPLOAD_MB = 50
+ALLOWED_EXT = {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
+
+
+@app.post("/analyze-upload")
+def analyze_upload(file: UploadFile = File(...), username: str = Form(None)):
+    """Analyze a video file uploaded directly (no download needed, so no 403 blocks)."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED_EXT:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Please upload MP4, MOV, WEBM, MKV or AVI.")
+
+    tmp_dir = tempfile.mkdtemp()
+    video_path = os.path.join(tmp_dir, "upload" + ext)
+    try:
+        size = 0
+        with open(video_path, "wb") as out:
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_UPLOAD_MB * 1024 * 1024:
+                    raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_UPLOAD_MB} MB.")
+                out.write(chunk)
+
+        if size == 0:
+            raise HTTPException(status_code=400, detail="The uploaded file is empty.")
+
+        print(f"[*] Uploaded file: {file.filename} ({size // 1024} KB)")
+        frames = extract_frames(video_path)
+        if not frames:
+            raise HTTPException(status_code=400, detail="No frames found. Video format may not be supported or file is corrupt.")
+
+        print(f"[*] Analyzing {len(frames)} frames...")
+        result = analyze_frames(frames)
+        save_result(username or None, "upload:" + (file.filename or "video"),
+                    result["verdict"], result["confidence"], result["signals"])
+        print(f"[done] {result['verdict']} ({result['confidence']}%)")
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[!] Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)[:150]}")
+    finally:
+        cleanup(video_path)
+
 
 @app.get("/history")
 def history(username: str = None):
