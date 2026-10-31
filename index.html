@@ -173,7 +173,7 @@
     .auth-msg.success { background: rgba(62,207,142,0.08); border: 1px solid rgba(62,207,142,0.25); color: var(--real); }
     .auth-msg.visible { display: block; }
 
-    /* ===== MAIN APP ===== */
+    /* ------ MAIN APP ------- */
     header {
       position: relative; z-index: 1;
       width: 100%; max-width: 860px;
@@ -478,7 +478,7 @@
 
     .error-card.visible { display: block; }
 
-    /* ===== STATS — now per-user, session only ===== */
+    /* ------ STATS — now per-user, session only ------ */
     .stats-row { display: flex; gap: 12px; width: 100%; flex-wrap: wrap; }
 
     .stat-box {
@@ -556,7 +556,7 @@
 <body>
 <div class="glow"></div>
 
-<!-- ========== AUTH PAGE ========== -->
+<!---------- AUTH PAGE ---------->
 <div class="page" id="authPage">
   <div class="auth-wrapper">
     <div class="auth-logo">
@@ -573,7 +573,7 @@
 
       <div id="authMsg" class="auth-msg error"></div>
 
-      <!-- Login Form -->
+      <!-------- Login Form ---------->
       <div id="loginForm">
         <div class="form-group">
           <label class="form-label">Username</label>
@@ -606,7 +606,7 @@
   </div>
 </div>
 
-<!-- ========== MAIN APP PAGE ========== -->
+<!------------ MAIN APP PAGE ---------->
 <div class="page active" id="appPage">
   <header>
     <div class="logo">
@@ -670,7 +670,7 @@
       </div>
     </div>
 
-    <!-- Per-user session stats only -->
+    <!------ Per-user session stats only -------->
     <div class="stats-label" id="statsLabel">YOUR SESSION STATS</div>
     <div class="stats-row">
       <div class="stat-box">
@@ -694,12 +694,14 @@
 
 <script>
   const API = 'http://localhost:8000';
+  // Restore saved login (survives page refresh)
   let currentUser = null;
+  try { currentUser = localStorage.getItem('vt_user') || null; } catch (e) {}
 
   // Per-user session stats — reset to 0 on every login
   let userStats = { total: 0, ai: 0, real: 0 };
 
-  // ===== AUTH =====
+  // ------ AUTH --------
 
   function switchTab(tab) {
     hideMsg();
@@ -767,6 +769,7 @@
       if (!res.ok) { showMsg(data.detail || 'Login failed.', 'error'); return; }
 
       currentUser = data.username;
+      try { localStorage.setItem('vt_user', currentUser); } catch (e) {}
 
       userStats = { total: 0, ai: 0, real: 0 };
       renderStats();
@@ -795,12 +798,14 @@
 
   function doLogout() {
     currentUser = null;
+    try { localStorage.removeItem('vt_user'); } catch (e) {}
     userStats = { total: 0, ai: 0, real: 0 };
     renderStats();
 
     document.getElementById('statsLabel').textContent = "YOUR STATS";
-    document.getElementById('authPage').classList.remove('active');
-    document.getElementById('appPage').classList.add('active');
+    document.getElementById('appPage').classList.remove('active');
+    document.getElementById('authPage').classList.add('active');
+    switchTab('login');
     document.getElementById('videoUrl').value = '';
     hideEl('resultCard'); hideEl('errorCard'); hideEl('loadingCard');
   }
@@ -823,9 +828,10 @@
 
     // 🔒 Guard: if somehow not logged in, redirect to auth
     if (!currentUser) {
-      switchTab('login');
       document.getElementById('appPage').classList.remove('active');
       document.getElementById('authPage').classList.add('active');
+      switchTab('login');
+      showMsg('Please log in first to analyze videos.', 'error');
       return;
     }
 
@@ -933,6 +939,19 @@
   }
 
   function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // -------- STARTUP ---------
+  (function init() {
+    if (currentUser) {
+      document.getElementById('statsLabel').textContent = currentUser.toUpperCase() + "'S STATS";
+      document.getElementById('authPage').classList.remove('active');
+      document.getElementById('appPage').classList.add('active');
+      loadUserStats(currentUser);
+    } else {
+      document.getElementById('appPage').classList.remove('active');
+      document.getElementById('authPage').classList.add('active');
+    }
+  })();
 
   document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('videoUrl').addEventListener('keydown', e => { if (e.key === 'Enter') analyzeVideo(); });
